@@ -1,12 +1,12 @@
 #!/bin/bash
 ns_domain_cloudflare() {
-	DOMAIN="tepllovpn.eu.org"
+	DOMAIN="smilezuka.cloud"
 	DOMAIN_PATH=$(cat /etc/xray/domain)
 	SUB=$(tr </dev/urandom -dc a-z0-9 | head -c7)
-	SUB_DOMAIN=${SUB}".tepllovpn.eu.org"
+	SUB_DOMAIN=${SUB}".smilezuka.cloud"
 	NS_DOMAIN=ns.${SUB_DOMAIN}
-	CF_ID=bangtepllo752@gmail.com
-        CF_KEY=d8e5c652e1ddcc6fbfb20b1d7b6364de70c82
+	CF_ID=zukatsuzuka@gmail.com
+    CF_KEY=1c849f6fb12f757697d39521351b6ab16e3f9
 	set -euo pipefail
 	IP=$(wget -qO- ipinfo.io/ip)
 	echo "Updating DNS NS for ${NS_DOMAIN}..."
