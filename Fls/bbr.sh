@@ -39,7 +39,7 @@ Check_And_Add_Line(){
 
 Install_BBR(){
 echo -e "\e[32;1m================================\e[0m"
-echo -e "\e[32;1mTCP BBR Mod Diwayaa...\e[0m"
+echo -e "\e[32;1mTCP BBR Mod SmileVPN...\e[0m"
 if [ -n "$(lsmod | grep bbr)" ];then
 echo -e "\e[0;32mSuccesfully Installed TCP BBR.\e[0m"
 echo -e "\e[32;1m================================\e[0m"
@@ -60,6 +60,7 @@ echo -e "\e[32;1m================================\e[0m"
 }
 
 Optimize_Parameters(){
+clear
 echo -e "\e[32;1m================================\e[0m"
 echo -e "\e[32;1mOptimize Parameters...\e[0m"
 modprobe ip_conntrack
@@ -165,6 +166,7 @@ echo -e "\e[0;32mSuccesfully Optimize Parameters.\e[0m"
 echo -e "\e[32;1m================================\e[0m"
 }
 Install_BBR
+clear
 Optimize_Parameters
 rm -f /root/bbr.sh >/dev/null 2>&1
 echo -e '\e[32;1m============================================================\e[0m'
