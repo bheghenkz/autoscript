@@ -1,0 +1,237 @@
+#!/bin/bash
+set -e
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+ok()   { echo -e "${GREEN}[OK]${NC} $1"; }
+warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+err()  { echo -e "${RED}[ERR]${NC} $1"; }
+
+if [ "$EUID" -ne 0 ]; then
+  err "Run as root"
+  exit 1
+fi
+
+echo -e "${YELLOW}This will remove autoscript services/configs, but keep nginx, curl, cron, and SSH.${NC}"
+read -rp "Continue? [y/N]: " confirm
+case "$confirm" in
+  y|Y|yes|YES) ;;
+  *) echo "Cancelled."; exit 0 ;;
+esac
+
+stop_disable_service() {
+  local svc="$1"
+  systemctl stop "$svc" 2>/dev/null || true
+  systemctl disable "$svc" 2>/dev/null || true
+}
+
+remove_path() {
+  local p="$1"
+  if [ -e "$p" ] || [ -L "$p" ]; then
+    rm -rf "$p"
+    ok "Removed $p"
+  fi
+}
+
+echo "Stopping custom services..."
+for svc in \
+  xray haproxy openvpn dropbear fail2ban ws trojan-go \
+  udp-custom noobzvpns kyt netfilter-persistent rc-local \
+  vmip vlip trip udp-mini-1 udp-mini-2 udp-mini-3 \
+  stunnel4 squid badvpn
+do
+  stop_disable_service "$svc"
+done
+
+echo "Removing custom systemd units..."
+for f in \
+  /etc/systemd/system/xray.service \
+  /etc/systemd/system/ws.service \
+  /etc/systemd/system/kyt.service \
+  /etc/systemd/system/udp-custom.service \
+  /etc/systemd/system/noobzvpns.service \
+  /etc/systemd/system/trojan-go.service \
+  /etc/systemd/system/vmip.service \
+  /etc/systemd/system/vlip.service \
+  /etc/systemd/system/trip.service \
+  /etc/systemd/system/udp-mini-1.service \
+  /etc/systemd/system/udp-mini-2.service \
+  /etc/systemd/system/udp-mini-3.service \
+  /etc/systemd/system/rc-local.service
+do
+  remove_path "$f"
+done
+
+systemctl daemon-reload || true
+
+echo "Removing autoscript configs/data..."
+for p in \
+  /etc/xray \
+  /var/log/xray \
+  /etc/vmess \
+  /etc/vless \
+  /etc/trojan \
+  /etc/shadowsocks \
+  /etc/bot \
+  /etc/kyt \
+  /etc/files \
+  /usr/bin/xray \
+  /usr/local/share/xray \
+  /usr/local/kyt \
+  /usr/bin/kyt \
+  /root/udp \
+  /etc/trojan-go \
+  /var/log/trojan-go \
+  /etc/profil \
+  /etc/rmbl \
+  /etc/per \
+  /etc/limit \
+  /etc/quota \
+  /etc/usage \
+  /etc/ssh/.ssh.db \
+  /etc/ssh/.ssh.db.lock
+do
+  remove_path "$p"
+done
+
+echo "Removing custom binaries/scripts..."
+for p in \
+  /usr/local/bin/xray \
+  /usr/local/bin/trojan-go \
+  /usr/bin/ws \
+  /usr/bin/tun.conf \
+  /usr/bin/limit-ip \
+  /usr/bin/user \
+  /usr/bin/e \
+  /usr/sbin/ftvpn \
+  /tmp/nameserver \
+  /etc/ipserver \
+  /root/bbr.sh \
+  /root/limit.sh \
+  /root/openvpn \
+  /root/domain \
+  /home/files \
+  /home/daily_reboot
+do
+  remove_path "$p"
+done
+
+echo "Removing SmileVPN menu/scripts..."
+rm -rf /usr/local/sbin/menu
+rm -rf /usr/local/sbin/m-*
+rm -rf /usr/local/sbin/*vmess*
+rm -rf /usr/local/sbin/*vless*
+rm -rf /usr/local/sbin/*trojan*
+rm -rf /usr/local/sbin/*noobz*
+rm -rf /usr/local/sbin/*ssh*
+rm -rf /usr/local/sbin/*theme*
+rm -rf /usr/local/sbin/*bot*
+rm -rf /usr/local/sbin/*backup*
+rm -rf /usr/local/sbin/*restart*
+rm -rf /usr/local/sbin/*reboot*
+rm -rf /usr/local/sbin/*system*
+rm -rf /usr/local/bin/menu
+rm -rf /usr/bin/menu
+rm -rf /bin/menu
+ok "Removed SmileVPN menu/scripts"
+
+echo "Removing menu autoload from shell files..."
+for f in /root/.profile /root/.bashrc /etc/profile /etc/bash.bashrc; do
+  [ -f "$f" ] && sed -i '/menu/d;/SmileVPN/d;/autoscript/d' "$f" || true
+done
+
+echo "Removing profile.d menu files..."
+rm -rf /etc/profile.d/menu.sh
+rm -rf /etc/profile.d/*vpn*
+rm -rf /etc/profile.d/*xray*
+rm -rf /etc/profile.d/*smile*
+
+echo "Removing MOTD/login banner..."
+rm -rf /etc/update-motd.d/*
+touch /root/.hushlogin
+
+echo "Removing cron jobs created by autoscript..."
+for f in \
+  /etc/cron.d/xp_all \
+  /etc/cron.d/daily_reboot \
+  /etc/cron.d/log.nginx \
+  /etc/cron.d/log.xray \
+  /etc/cron.d/autoreboot \
+  /etc/cron.d/backup \
+  /etc/cron.d/limit
+do
+  remove_path "$f"
+done
+systemctl restart cron 2>/dev/null || true
+
+echo "Cleaning service-specific config files..."
+for f in \
+  /etc/haproxy/haproxy.cfg \
+  /etc/default/dropbear \
+  /etc/banner.txt \
+  /etc/squid/squid.conf \
+  /etc/stunnel/stunnel.conf
+do
+  remove_path "$f"
+done
+
+echo "Cleaning custom nginx/xray conf..."
+remove_path /etc/nginx/conf.d/xray.conf
+remove_path /etc/nginx/conf.d/vps.conf
+remove_path /etc/nginx/conf.d/websocket.conf
+
+echo "Resetting /etc/rc.local..."
+cat > /etc/rc.local <<'RCLOCAL'
+#!/bin/bash
+exit 0
+RCLOCAL
+chmod +x /etc/rc.local
+ok "Reset /etc/rc.local"
+
+echo "Removing swapfile if present..."
+if swapon --show | grep -q '/swapfile'; then
+  swapoff /swapfile || true
+fi
+if grep -q '^/swapfile' /etc/fstab 2>/dev/null; then
+  sed -i '\|^/swapfile|d' /etc/fstab
+fi
+remove_path /swapfile
+
+echo "Cleaning iptables rules..."
+iptables -F || true
+iptables -t nat -F || true
+iptables -t mangle -F || true
+iptables -X || true
+netfilter-persistent save 2>/dev/null || true
+netfilter-persistent reload 2>/dev/null || true
+
+echo "Purging autoscript-related packages only..."
+apt-get remove --purge -y \
+  haproxy openvpn dropbear fail2ban chrony \
+  netfilter-persistent iptables-persistent \
+  squid stunnel4 || true
+
+apt-get autoremove -y || true
+apt-get clean || true
+
+echo "Repairing SSH..."
+chattr -i -a /etc/ssh /etc/ssh/sshd_config 2>/dev/null || true
+if [ -f /etc/ssh/sshd_config ]; then
+  sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/g' /etc/ssh/sshd_config
+  sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+  grep -q '^KbdInteractiveAuthentication yes' /etc/ssh/sshd_config || echo 'KbdInteractiveAuthentication yes' >> /etc/ssh/sshd_config
+  sed -i 's/^#*UsePAM.*/UsePAM yes/g' /etc/ssh/sshd_config
+  chmod 644 /etc/ssh/sshd_config
+  systemctl enable ssh >/dev/null 2>&1 || true
+  systemctl restart ssh >/dev/null 2>&1 || true
+fi
+
+hash -r 2>/dev/null || true
+
+echo
+ok "Uninstall finished clean."
+warn "nginx, curl, cron, and SSH were kept."
+warn "Recommended: reboot VPS now."

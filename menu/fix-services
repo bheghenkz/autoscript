@@ -1,0 +1,118 @@
+#!/bin/bash
+set +e
+LOG=/root/autoscript-health.txt
+{
+echo "===== FIX-SERVICES $(date '+%F %T') ====="
+chattr -i -a /root/.profile 2>/dev/null || true
+chattr -i -a /etc/ssh 2>/dev/null || true
+chattr -i -a /etc/ssh/sshd_config 2>/dev/null || true
+if [ -f /etc/ssh/sshd_config ]; then
+  sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/g' /etc/ssh/sshd_config
+  sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+  sed -i 's/^#*KbdInteractiveAuthentication.*/KbdInteractiveAuthentication yes/g' /etc/ssh/sshd_config
+  grep -q '^KbdInteractiveAuthentication yes' /etc/ssh/sshd_config || echo 'KbdInteractiveAuthentication yes' >> /etc/ssh/sshd_config
+  sed -i 's/^#*UsePAM.*/UsePAM yes/g' /etc/ssh/sshd_config
+  chmod 644 /etc/ssh/sshd_config
+fi
+mkdir -p /var/log/xray /run/xray /etc/dropbear /var/log/trojan-go /etc/trojan-go
+
+DOMAIN=$(cat /etc/xray/domain 2>/dev/null || cat /root/domain 2>/dev/null || echo "")
+[ -z "$DOMAIN" ] && DOMAIN="localhost"
+if [ ! -s /etc/trojan-go/uuid.txt ]; then
+  mkdir -p /etc/trojan-go
+  cat /proc/sys/kernel/random/uuid > /etc/trojan-go/uuid.txt
+fi
+TRGO_UUID=$(cat /etc/trojan-go/uuid.txt 2>/dev/null || cat /proc/sys/kernel/random/uuid)
+if [ ! -s /etc/trojan-go/config.json ]; then
+cat >/etc/trojan-go/config.json <<TCONF
+{
+  "run_type": "server",
+  "local_addr": "0.0.0.0",
+  "local_port": 9443,
+  "remote_addr": "127.0.0.1",
+  "remote_port": 89,
+  "log_level": 1,
+  "log_file": "/var/log/trojan-go/trojan-go.log",
+  "password": ["$TRGO_UUID"],
+  "ssl": {
+    "cert": "/etc/xray/xray.crt",
+    "key": "/etc/xray/xray.key",
+    "sni": "$DOMAIN"
+  },
+  "websocket": {
+    "enabled": true,
+    "path": "/trojango",
+    "host": "$DOMAIN"
+  }
+}
+TCONF
+fi
+
+: > /var/log/xray/access.log
+: > /var/log/xray/error.log
+chmod 755 /var/log/xray /run/xray /etc/xray 2>/dev/null || true
+chmod 666 /var/log/xray/access.log /var/log/xray/error.log
+touch /var/log/trojan-go/trojan-go.log 2>/dev/null || true
+chmod 666 /var/log/trojan-go/trojan-go.log 2>/dev/null || true
+chown -R root:root /var/log/xray /etc/xray 2>/dev/null || true
+chmod 644 /etc/xray/config.json /etc/xray/xray.crt 2>/dev/null || true
+chmod 600 /etc/xray/xray.key 2>/dev/null || true
+if [ -f /etc/systemd/system/xray.service ]; then
+  sed -i 's/^User=.*/User=root/g' /etc/systemd/system/xray.service
+  sed -i 's|ExecStart=.*|ExecStart=/usr/local/bin/xray run -config /etc/xray/config.json|g' /etc/systemd/system/xray.service
+fi
+dropbearkey -t rsa -f /etc/dropbear/dropbear_rsa_host_key >/dev/null 2>&1 || true
+dropbearkey -t ecdsa -f /etc/dropbear/dropbear_ecdsa_host_key >/dev/null 2>&1 || true
+dropbearkey -t ed25519 -f /etc/dropbear/dropbear_ed25519_host_key >/dev/null 2>&1 || true
+cat >/etc/default/dropbear <<DROP
+NO_START=0
+DROPBEAR_PORT=110
+DROPBEAR_EXTRA_ARGS="-p 110"
+DROPBEAR_BANNER="/etc/banner.txt"
+DROPBEAR_RECEIVE_WINDOW=65536
+DROP
+# Trojan-Go safe config: use 9443 to avoid NoobzVPN 2087 conflict
+if [ -f /etc/trojan-go/config.json ]; then
+  sed -i 's/"local_port"[[:space:]]*:[[:space:]]*[0-9][0-9]*/"local_port": 9443/g' /etc/trojan-go/config.json
+  sed -i 's/"sni"[[:space:]]*:[[:space:]]*""/"sni": "'"$DOMAIN"'"/g' /etc/trojan-go/config.json
+  sed -i 's/"host"[[:space:]]*:[[:space:]]*""/"host": "'"$DOMAIN"'"/g' /etc/trojan-go/config.json
+fi
+cat >/etc/systemd/system/trojan-go.service <<TRGO
+[Unit]
+Description=Trojan-Go Service
+Documentation=https://github.com/p4gefau1t/trojan-go
+After=network.target nss-lookup.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/trojan-go -config /etc/trojan-go/config.json
+Restart=always
+RestartSec=3
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+TRGO
+chmod +x /usr/local/bin/trojan-go /root/udp/udp-custom /usr/bin/ws 2>/dev/null || true
+systemctl daemon-reload
+for s in ssh nginx xray haproxy dropbear ws udp-custom noobzvpns trojan-go; do systemctl enable "$s" >/dev/null 2>&1 || true; done
+for s in ssh nginx xray haproxy dropbear ws udp-custom noobzvpns; do systemctl restart "$s" >/dev/null 2>&1 || true; done
+# start trojan-go after noobz to avoid restart race; port now different
+systemctl reset-failed trojan-go >/dev/null 2>&1 || true
+systemctl restart trojan-go >/dev/null 2>&1 || true
+sleep 3
+if ! systemctl is-active --quiet trojan-go; then
+  echo "--- trojan-go direct test ---"
+  /usr/local/bin/trojan-go -config /etc/trojan-go/config.json 2>&1 | head -80 || true
+fi
+echo "--- active states ---"
+for s in ssh nginx xray haproxy dropbear ws udp-custom noobzvpns trojan-go; do printf '%-14s %s\n' "$s" "$(systemctl is-active "$s" 2>/dev/null || true)"; done
+echo "--- failed units ---"
+systemctl --failed --no-pager || true
+echo "--- ports ---"
+ss -tulpn 2>/dev/null | grep -E ':(22|80|443|110|9443|2082|2086|2087|2096|5300)' || true
+echo "--- recent xray ---"; journalctl -u xray -n 40 --no-pager 2>/dev/null || true
+echo "--- recent trojan-go ---"; journalctl -u trojan-go -n 80 --no-pager 2>/dev/null || true
+echo "===== END FIX-SERVICES ====="
+} | tee -a "$LOG"

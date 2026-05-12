@@ -1,0 +1,70 @@
+#!/bin/bash
+# //====================================================
+# //	System Request:Debian 9+/Ubuntu 18.04+/20+
+# //	Author:	RMBLvpn
+# //	Dscription: Xray Menu Management
+# //	email: admin@RMBL VPN
+# //  telegram: https://t.me/rmblvpnq
+# //====================================================
+# // font color configuration | RMBL AUTOSCRIPT
+red() { echo -e "\\033[32;1m${*}\\033[0m"; }
+IP=$(curl -4 -s ifconfig.me/ip)
+HOST="$(cat /etc/xray/domain)"
+DATEVPS=$(date +"%d-%B-%Y")
+ISPVPS=$(cat /etc/xray/isp)
+CITY=$(cat /etc/xray/city)
+GREEN="\e[92;1m"
+BLUE="\033[36m"
+RED='\033[0;31m'
+NC='\033[0m'
+read -p "Plase Input Link : " -e DATAVPS
+function RESTOREVPS() {
+    cd /root
+    wget -O backup.zip "$DATAVPS" >/dev/null 2>&1
+    unzip *.zip >/dev/null 2>&1
+    cd /root/backup
+    cp -r passwd /etc/ &> /dev/null
+    cp -r group /etc/ &> /dev/null
+    cp -r shadow /etc/ &> /dev/null
+    cp -r xray /etc/xray/config.json &> /dev/null
+    cp -r ssh /etc/xray/ssh &> /dev/null
+    cp -r idchat /usr/bin/idchat &> /dev/null
+    cp -r token /usr/bin/token &> /dev/null
+    cp -r id /etc/per/id &> /dev/null
+    cp -r token2 /etc/per/token &> /dev/null
+    cp -r loginid /etc/perlogin/id &> /dev/null
+    cp -r logintoken /etc/perlogin/token &> /dev/null
+    cp -r html /var/www/ &> /dev/null
+    cp -r gshadow /etc/ &> /dev/null
+    cp -r sshx /etc/xray/ &> /dev/null
+    cp -r vmess /etc/ &> /dev/null
+    cp -r vless /etc/ &> /dev/null
+    cp -r trojan /etc/ &> /dev/null
+mkdir -p /etc/xray
+cp -r noob /etc/xray/noob &> /dev/null
+cp -r noobz-log /etc/xray/noobz &> /dev/null
+mkdir -p /etc/noobzvpns
+cp -r noobz-users.json /etc/noobzvpns/users.json &> /dev/null
+rm -rf /etc/trojan-go
+mkdir -p /etc/trojan-go
+cp -a trojan-go/. /etc/trojan-go/ &> /dev/null
+    cp -r issue /etc/issue.net &> /dev/null
+
+    systemctl restart xray &> /dev/null
+    systemctl restart nginx &> /dev/null
+    cd /root
+    rm -f *.zip >/dev/null 2>&1
+    rm -rf /root/backup
+    echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "SUCCESSFULL RESTORE YOUR VPS"
+    echo -e "Please Save The Following Data"
+    echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "Your VPS IP : $IP"
+    echo -e "DOMAIN      : $HOST"
+    echo -e "DATE        : $DATEVPS"
+    echo -e "ISP         : $ISPVPS"
+    echo -e "LOCATION    : $CITY"
+    echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "Please Reboot Vps"
+}
+RESTOREVPS
